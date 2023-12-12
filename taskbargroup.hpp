@@ -20,7 +20,7 @@ int ChangeTaskBarLnkTargetPath(wchar_t *lpAppPath) {
             throw -1;
 
         taskbarPath = szPath;
-        taskbarPath.append(TEXT("\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Chromium.lnk"));
+        taskbarPath.append(TEXT("\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Firefox.lnk"));
 
         if (!APPID::getLnkAppPath(taskbarPath.c_str(), szPath, MAX_PATH))
             throw -2;

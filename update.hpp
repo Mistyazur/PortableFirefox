@@ -12,7 +12,7 @@
 #include <string>
 #include <iostream>
 
-#define UNGOOGLED_CHROMIUM_LATEST_UPDATE_URL "https://api.github.com/repos/%s/releases/latest"
+#define FIREFOX_LATEST_UPDATE_URL "https://download.mozilla.org/?product=firefox-latest&os=win64&lang=en-US"
 
 namespace pt = boost::property_tree;
 
@@ -54,48 +54,65 @@ int CompareVersion(const std::string& a, const std::string& b)
     return 0;
 }
 
+int convertExeTo7z(const char *fileExe, const char *file7z)
+{
+    std::ifstream ifs(fileExe, std::ios::binary);
+    if(!ifs)
+        return 1;
+
+    std::vector<char> data = std::vector<char>(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+    // const std::vector<char> pattern{'\r', '\n', '\r', '\n'};
+    const char *pattern = "!@InstallEnd@!";
+    auto it = std::search(data.begin(), data.end(), pattern, pattern + strlen(pattern));
+
+    std::ofstream ofs(file7z, std::ios::binary);
+    if(!ofs)
+        return 2;
+
+    std::copy(it + strlen(pattern), data.end(), std::ostreambuf_iterator<char>(ofs));
+
+    ifs.close();
+    ofs.close();
+
+    DeleteFileA(fileExe);
+
+    return 0;
+}
+
 int UpdateChromium(
     const std::string &currentVersion,
     std::string &updateVersion,
-    const std::string &curlExtraParams,
-    const std::string &githubRepo,
-    const std::string &githubAsset,
-    const std::string &githubMirror
+    const std::string &curlExtraParams
 )
 {
-    std::string res, cmd, downloadUrl;
-    std::regex re(githubAsset);
+    const char *excutableName = "firefox.exe";
+    const char *archiveName = "firefox.7z";
+    std::string res, downloadUrl;
+    std::regex versionRe(R"(/firefox/releases/([\d+\.]+)/)");
+    std::smatch matches;
     pt::ptree root, assets;
     boost::format format;
     int exitcode = -1;
     bool needUpdate = false;
 
     // Request latest chromium info
-    format = boost::format("curl %s %s") % curlExtraParams % UNGOOGLED_CHROMIUM_LATEST_UPDATE_URL;
-    format = boost::format(format.str()) % githubRepo;
-    cmd = format.str();
-    std::cout << "curl: " << cmd << std::endl;
+    format = boost::format("curl --head %s \"%s\"") % curlExtraParams % FIREFOX_LATEST_UPDATE_URL;
+    std::cout << "curl: " << format.str() << std::endl;
     for (int i=0; i<5 && exitcode!=0; ++i) {
         std::cout << "Try get latest update info: ";
-        res = ExecCmd(cmd.c_str(), &exitcode);
+        res = ExecCmd(format.str().c_str(), &exitcode);
         std::cout << exitcode << std::endl;
     }
     if (exitcode || res.empty())
         return 1;
 
-    //
-    try {
-        std::stringstream ss;
-        ss << res;
-        pt::read_json(ss, root);
-        updateVersion = root.get<std::string>("name", "");
-        std::cout << "New Version: " << updateVersion << std::endl;
-    } catch (...) {
+    if (!std::regex_search(res, matches, versionRe))
         return 2;
-    }
+    
+    updateVersion = matches[1];
 
     if (currentVersion.empty()) {
-        // Chromium is not installed
+        // Firefox is not installed
         needUpdate = true;
     } else {
         if (CompareVersion(updateVersion, currentVersion) == 1)
@@ -104,49 +121,39 @@ int UpdateChromium(
 
     if (!needUpdate)
         return 3;
-    
-    // Get download url
-    assets = root.get_child("assets");
-    for (auto &asset : assets) {
-        res = asset.second.get<std::string>("name", "");
-        if (std::regex_match(res, re)) {
-            downloadUrl = asset.second.get<std::string>("browser_download_url", "");
-            break;
-        }
-    }
-    if (downloadUrl.empty())
-        return 4;
-
-    // Optimize github download url
-    boost::replace_first(downloadUrl, "https://github.com", githubMirror);
 
     // Download
-    cmd = boost::str(boost::format(
-        "curl -L -o ungoogled-chromium.zip %s %s") % curlExtraParams % downloadUrl);
-    std::cout << "curl: " << cmd << std::endl;
-    ExecCmd(cmd.c_str(), &exitcode);
+    format = boost::format("curl -L %s -o %s \"%s\"") % curlExtraParams % excutableName % FIREFOX_LATEST_UPDATE_URL;
+    std::cout << "curl: " << format.str() << std::endl;
+    ExecCmd(format.str().c_str(), &exitcode);
     if (exitcode != 0)
+        return 4;
+
+    // Convert from self-extract exe to 7z
+    if (convertExeTo7z(excutableName, archiveName) != 0)
         return 5;
 
-    return 11;
     // Check zip integerity
-    ExecCmd(R"(7za t ungoogled-chromium.zip >NUL 2>NUL)", &exitcode);
+    format = boost::format(R"(7za t %s >NUL 2>NUL)")  % archiveName;
+    ExecCmd(format.str().c_str(), &exitcode);
+    std::cout << "7za: " << format.str() << std::endl;
     if (exitcode != 0) {
-        DeleteFileW(L"ungoogled-chromium.zip");
+        DeleteFileA(archiveName);
         return 6;
     }
     
     // Unzip
-    cmd = boost::str(boost::format(
-        "7za x ungoogled-chromium.zip >NUL 2>NUL && move ungoogled-chromium_* %s") % updateVersion);
-    res = ExecCmd(cmd.c_str(), &exitcode);
+    format = boost::format(
+                 "7za x %s core >NUL 2>NUL && move core %s") % archiveName % updateVersion;
+    std::cout << "7za: " << format.str() << std::endl;
+    res = ExecCmd(format.str().c_str(), &exitcode);
     if (exitcode != 0) {
-        DeleteFileW(L"ungoogled-chromium.zip");
+        DeleteFileA(archiveName);
         return 7;
     }
 
     // Delete File
-    DeleteFileW(L"ungoogled-chromium.zip");
+    DeleteFileA(archiveName);
 
     // Succeeded
     return 0;

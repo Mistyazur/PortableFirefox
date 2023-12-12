@@ -72,7 +72,7 @@ std::string ExecCmd(const char* cmd) {
 }
 */
 
-BOOL StartProcess(LPCWSTR lpCmd, DWORD *exitcode = nullptr)
+BOOL StartProcess(LPCWSTR lpCmd, LPCWSTR lpWorkingDir, DWORD *exitcode = nullptr)
 {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
@@ -93,7 +93,7 @@ BOOL StartProcess(LPCWSTR lpCmd, DWORD *exitcode = nullptr)
                        FALSE,             // Set handle inheritance to FALSE
                        0,                 // No creation flags
                        NULL,              // Use parent's environment block
-                       NULL,              // Use parent's starting directory
+                       lpWorkingDir,      // Use parent's starting directory
                        &si,               // Pointer to STARTUPINFO structure
                        &pi                // Pointer to PROCESS_INFORMATION structure (removed extra parentheses)
                        ))

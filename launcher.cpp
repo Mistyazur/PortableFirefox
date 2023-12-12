@@ -12,9 +12,9 @@
 #include <fstream>
 #include <exception>
 
-#define CONFIG_FILE_NAME                    "UCLauncher.json"
+#define CONFIG_FILE_NAME                    "PortableFirefox.json"
 #define CONFIG_DEFAULT_VERSION              ""
-#define CONFIG_DEFAULT_PARAMS               "--user-data-dir=..\\userdata --flag-switches-begin --no-default-browser-check --disable-machine-id --flag-switches-end"
+#define CONFIG_DEFAULT_PARAMS               R"(-profile "..\profile")"
 #define CONFIG_DEFAULT_CURL_PARAMS          R"(-k --connect-timeout 5 --proxy socks5://127.0.0.1:1080)"
 #define CONFIG_DEFAULT_UPDATE_INTERVAL      72
 #define CONFIG_DEFAULT_UPDATE_TIMESTAMP     0
@@ -38,10 +38,9 @@ int wmain(int argc, wchar_t** argv) {
     std::string params;
     std::string updateVersion;
     std::string curlExtraParams;
-    std::string githubRepo;
-    std::string githubMirror;
-    std::string githubAsset;
     std::wstring cmd;
+    fs::wpath firefoxPath;
+    fs::wpath firefoxWorkingDir;
 
     int updateInterval = 0;
     int currentTimestamp = 0;
@@ -62,9 +61,6 @@ int wmain(int argc, wchar_t** argv) {
         curlExtraParams = root.get<std::string>("curl.params", "");
         updateInterval = root.get<int>("update.interval", CONFIG_DEFAULT_UPDATE_INTERVAL);
         lastCheckUpdateTimestamp = root.get<int>("update.timestamp", CONFIG_DEFAULT_UPDATE_TIMESTAMP);
-        githubRepo = root.get<std::string>("github.repo", "");
-        githubAsset = root.get<std::string>("github.asset", "");
-        githubMirror = root.get<std::string>("github.mirror", "");
     } catch (std::exception &e) {
         std::cout << "[read_json]" << e.what() << std::endl;
 
@@ -74,9 +70,6 @@ int wmain(int argc, wchar_t** argv) {
         root.put("curl.params", "-k --connect-timeout 5");
         root.put("update.interval", CONFIG_DEFAULT_UPDATE_INTERVAL);
         root.put("update.timestamp", CONFIG_DEFAULT_UPDATE_TIMESTAMP);
-        root.put("github.repo", "Hibbiki/chromium-win64");
-        root.put("github.asset", R"(chrome\.sync\.7z)");
-        root.put("github.mirror", R"(https://hub.gitmirror.com/https://github.com)");
 
         // pt::write_json(CONFIG_FILE_NAME, root);
         write_json_without_escape_forward_slash(CONFIG_FILE_NAME, root);
@@ -89,11 +82,15 @@ int wmain(int argc, wchar_t** argv) {
 
         // Run chromium
         if (argc <= 2) {
+            firefoxPath = fs::system_complete(argv[0]).parent_path() / currentVersion.c_str() / "firefox.exe";
+            firefoxWorkingDir = fs::system_complete(argv[0]).parent_path() / currentVersion.c_str();
+
             if (argc == 2)
-                cmd = boost::str(boost::wformat(L".\\%s\\chrome.exe %s %s") % currentVersion.c_str() % argv[1] % params.c_str());
+                cmd = boost::str(boost::wformat(L"%s %s %s") % firefoxPath % argv[1] % params.c_str());
             else
-                cmd = boost::str(boost::wformat(L".\\%s\\chrome.exe %s") % currentVersion.c_str() % params.c_str());
-            StartProcess(cmd.c_str());
+                cmd = boost::str(boost::wformat(L"%s %s") % firefoxPath % params.c_str());
+            
+            StartProcess(cmd.c_str(), firefoxWorkingDir.c_str());
         }
     }
 
@@ -103,15 +100,10 @@ int wmain(int argc, wchar_t** argv) {
         return 0;
 
     // Update
-    if (githubRepo.empty() || githubAsset.empty())
-        return 0;
     if (UpdateChromium(
             currentVersion,
             updateVersion,
-            curlExtraParams,
-            githubRepo,
-            githubAsset,
-            githubMirror) == 0)
+            curlExtraParams) == 0)
     {
         // Get new update, so save to config
         root.put("version", updateVersion);
