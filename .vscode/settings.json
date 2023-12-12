@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "array": "cpp",
+        "initializer_list": "cpp",
+        "regex": "cpp",
+        "type_traits": "cpp",
+        "vector": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp",
+        "sstream": "cpp",
+        "filesystem": "cpp",
+        "xiosbase": "cpp"
+    }
+}
