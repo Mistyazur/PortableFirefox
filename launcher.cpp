@@ -4,6 +4,7 @@
 
 #include <boost/json.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/exception/exception.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -12,12 +13,17 @@
 #include <fstream>
 #include <exception>
 
+#define FIREFOX_DIR                         "firefox"
+#define OBSOLETE_DIR                        "obsolete"
+
 #define CONFIG_FILE_NAME                    "PortableFirefox.json"
 #define CONFIG_DEFAULT_VERSION              ""
 #define CONFIG_DEFAULT_PARAMS               R"(-profile "..\profile")"
 #define CONFIG_DEFAULT_CURL_PARAMS          R"(-k --connect-timeout 5 --proxy socks5://127.0.0.1:1080)"
 #define CONFIG_DEFAULT_UPDATE_INTERVAL      72
 #define CONFIG_DEFAULT_UPDATE_TIMESTAMP     0
+
+#define AUTO_CONFIG_JS                      "pref(\"general.config.obscure_value\", 0);\npref(\"general.config.filename\", \"autoconfig.cfg\");\n"
 
 // #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:wmainCRTStartup")
 
@@ -33,18 +39,41 @@ void write_json_without_escape_forward_slash(std::string filename, pt::ptree tre
     ofs << json;
 }
 
+void ParseFirefoxAutoConfig() {
+    std::ifstream ifs(CONFIG_FILE_NAME);
+    std::string jsonStr((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    boost::json::object jsonObj = boost::json::parse(jsonStr).as_object();
+
+    auto jsonValAutoconfig = jsonObj.if_contains("autoconfig");
+    if (jsonValAutoconfig) {
+        fs::path autoconfigJS = fs::current_path() / FIREFOX_DIR / "\\defaults\\pref\\autoconfig.js";
+        std::ofstream ofsJS(autoconfigJS.c_str());
+        ofsJS << AUTO_CONFIG_JS;
+
+        fs::path path = fs::current_path() / FIREFOX_DIR / "autoconfig.cfg";
+        std::ofstream ofs(path.c_str());
+        ofs << "//" << std::endl;
+        for (auto &i : jsonValAutoconfig->as_object()) {
+            boost::format format = boost::format("pref(\"%s\", %s)") % i.key() % i.value();
+            ofs << format << std::endl;
+        }
+    }
+}
+
 int wmain(int argc, wchar_t** argv) {
     std::string currentVersion;
     std::string params;
     std::string updateVersion;
     std::string curlExtraParams;
     std::wstring cmd;
+    boost::format format;
     fs::wpath firefoxPath;
     fs::wpath firefoxWorkingDir;
 
     int updateInterval = 0;
     int currentTimestamp = 0;
     int lastCheckUpdateTimestamp = 0;
+    int err = 0;
 
     pt::ptree root;
 
@@ -76,14 +105,40 @@ int wmain(int argc, wchar_t** argv) {
         return 0;
     }
 
-    if (!currentVersion.empty()) {
+    // Apply update
+    try {
+        if (fs::exists(OBSOLETE_DIR))
+            fs::remove_all(OBSOLETE_DIR);
+
+        if (fs::exists(currentVersion)) {
+            // Need rename current version dir to firefox dir
+            if (!fs::exists(FIREFOX_DIR)) {
+                fs::rename(currentVersion, FIREFOX_DIR);
+            } else {
+                fs::rename(FIREFOX_DIR, OBSOLETE_DIR);
+                try {
+                    fs::rename(currentVersion, FIREFOX_DIR);
+                } catch (fs::filesystem_error e) {
+                    fs::rename(OBSOLETE_DIR, FIREFOX_DIR);
+                }
+            }
+        }
+    } catch (fs::filesystem_error e) {
+        std::cout << e.what() << std::endl;
+    }
+
+    // Start firefox
+    if (fs::exists(FIREFOX_DIR)) {
         // Taskbar group
         ChangeTaskBarLnkTargetPath(argv[0]);
 
+        // Firefox auto config
+        ParseFirefoxAutoConfig();
+
         // Run chromium
         if (argc <= 2) {
-            firefoxPath = fs::system_complete(argv[0]).parent_path() / currentVersion.c_str() / "firefox.exe";
-            firefoxWorkingDir = fs::system_complete(argv[0]).parent_path() / currentVersion.c_str();
+            firefoxPath = fs::system_complete(argv[0]).parent_path() / FIREFOX_DIR / "firefox.exe";
+            firefoxWorkingDir = fs::system_complete(argv[0]).parent_path() / FIREFOX_DIR;
 
             if (argc == 2)
                 cmd = boost::str(boost::wformat(L"%s %s %s") % firefoxPath % argv[1] % params.c_str());
@@ -92,12 +147,14 @@ int wmain(int argc, wchar_t** argv) {
             
             StartProcess(cmd.c_str(), firefoxWorkingDir.c_str());
         }
-    }
 
-    // Check update interval
-    currentTimestamp = time(NULL);
-    if (currentTimestamp - lastCheckUpdateTimestamp < updateInterval * 3600)
-        return 0;
+        // Check update interval
+        currentTimestamp = time(NULL);
+        if (currentTimestamp - lastCheckUpdateTimestamp < updateInterval * 3600)
+            return 0;
+    } else {
+        currentVersion.clear();
+    }
 
     // Update
     if (UpdateChromium(
@@ -110,10 +167,6 @@ int wmain(int argc, wchar_t** argv) {
         root.put("update.timestamp", currentTimestamp);
         // pt::write_json(CONFIG_FILE_NAME, root);
         write_json_without_escape_forward_slash(CONFIG_FILE_NAME, root);
-
-        // Delte old version when restart
-        if (!currentVersion.empty())
-            MoveFileExA(currentVersion.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
     }
 
     return 0;
