@@ -125,7 +125,7 @@ CLS && ECHO.&ECHO Done! &&PAUSE>NUL & EXIT
 
 
 :DisableAutoConfig
-del "%~dp0\Firefox\defaults\pref\autoconfig.js"
-del "%~dp0\Firefox\autoconfig.cfg"
+del /f "%~dp0\Firefox\defaults\pref\autoconfig.js"
+del /f "%~dp0\Firefox\autoconfig.cfg"
 
 CLS && ECHO.&ECHO Done! &&PAUSE>NUL & EXIT

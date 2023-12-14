@@ -9,6 +9,7 @@
         "xutility": "cpp",
         "sstream": "cpp",
         "filesystem": "cpp",
-        "xiosbase": "cpp"
+        "xiosbase": "cpp",
+        "string": "cpp"
     }
 }
