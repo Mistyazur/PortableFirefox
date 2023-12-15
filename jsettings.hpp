@@ -2,10 +2,9 @@
 #define __JSETTINGS_HPP__
 
 #include "rapidjson/document.h"
-#include "rapidjson/writer.h"
+#include "rapidjson/pointer.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
-#include "rapidjson/pointer.h"
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/ostreamwrapper.h"
 
@@ -18,10 +17,16 @@ class JSettings {
 public:
     JSettings() {};
 
-    ~JSettings() {};
+    ~JSettings() {
+        save();
+    };
 
-    bool open(const char *path) {
-        std::ifstream ifs(path);
+    bool load(const char *path) {
+        if (strlen(path) == 0)
+            return false;
+
+        m_path = path;
+        std::fstream ifs(path);
         if (ifs.is_open()) {
             IStreamWrapper isw {ifs};
             m_doc.ParseStream(isw);
@@ -30,17 +35,13 @@ public:
         return false;
     };
 
-    template <typename T>
-    void set(const char *path, const T &value) {
-        Pointer(path).Set(m_doc, value);
-    };
+    bool save(const char *path = nullptr) {
+        if (path == nullptr)
+            path = m_path.c_str();
 
-    template<typename T>
-    T get(const char *path) {
-        return Pointer(path).Get(m_doc)->Get<T>();
-    };
+        if (m_doc.Empty() || strlen(path) == 0)
+            return false;
 
-    bool save(const char *path) {
         std::ofstream ofs(path);
         if (ofs.is_open()) {
             OStreamWrapper osw{ofs};
@@ -52,25 +53,49 @@ public:
     };
 
 
+    template <typename T>
+    void set(const char *path, const T &value) {
+        Pointer(path).Set(m_doc, value);
+    };
+
+    // // This will create path with default value
+    // template<typename T>
+    // T get(const char *path, const T default) {
+    //     return Pointer(path).GetWithDefault(m_doc, default).Get<T>();
+    // };
+
+    // This will not create path with default value
+    template<typename T>
+    T get(const char *path, const T default) {
+        Value *val = Pointer(path).Get(m_doc);
+        if (!val)
+            return default;
+        return val->Get<T>();
+    };
+
+    std::string getObjStr(const char *path, const char *default) {
+        Value *val = Pointer(path).Get(m_doc);
+        if (!val || !val->IsObject())
+            return default;
+
+        StringBuffer strbuf;
+        Writer<StringBuffer> writer(strbuf);
+        val->Accept(writer);
+        std::cout << strbuf.GetString() << std::endl;
+        return strbuf.GetString();
+    }
+
 private:
     Document m_doc;
+    std::string m_path;
 };
 
 int testJSettings() {
     JSettings settings;
-    settings.open("test.json");
-    settings.set("/a/b/c.d.e", 1);
-    // settings.set("/a/b/c.d.f", false);
-    // settings.set("/a/b/c.d.g", "false");
-    // std::cout << settings.get<int>("/a/b/c.d.e") << std::endl;;
-
-    std::cout << settings.get<const char *>("/a/b/c.d.g") <<std::endl;
-    std::cout << settings.get<std::string>("/a/b/c.d.g") <<std::endl;
-    // std::cout << settings.get("/a/b/c.d.e")->GetInt() << std::endl;;
-    // std::cout << settings.get("/a/b/c.d.g")->GetString() << std::endl;;
-    // settings.set("/a/b/c.d.f", false);
-    // settings.set("/a/b/c.d.g", "false");
-    // settings.save("test.json");
+    settings.load("PortableFirefox.json");
+    std::cout << settings.getObjStr("/autoconfig", "123") <<std::endl;
+    // std::cout << settings.get<int>("/a/b/c.d.e", 1) << std::endl;
+    settings.save();
     return 0;
 }
 
