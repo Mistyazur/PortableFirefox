@@ -25,12 +25,6 @@ echo.
 echo 2. Unset default browser 
 echo.
 echo.
-echo 3. Enable auto config
-echo.
-echo.
-echo 4. Disable auto config
-echo.
-echo.
 echo.
 set /p  ID=Input No.:
 if "%id%"=="1" GOTO SetDefaultBrowser
@@ -113,19 +107,5 @@ reg delete "HKLM\Software\Classes\%PORTABLE_FIREFOX_NAME_SHORT%URL" /f
 reg delete "HKLM\Software\RegisteredApplications" /v "%PORTABLE_FIREFOX_NAME_SHORT%" /f
 
 reg delete "HKLM\Software\Clients\StartMenuInternet\%PORTABLE_FIREFOX_NAME_SHORT%" /f
-
-CLS && ECHO.&ECHO Done! &&PAUSE>NUL & EXIT
-
-
-:EnableAutoConfig
-mklink "%~dp0\Firefox\defaults\pref\autoconfig.js" "%~dp0\autoconfig.js"
-mklink "%~dp0\Firefox\autoconfig.cfg" "%~dp0\autoconfig.cfg"
-
-CLS && ECHO.&ECHO Done! &&PAUSE>NUL & EXIT
-
-
-:DisableAutoConfig
-del /f "%~dp0\Firefox\defaults\pref\autoconfig.js"
-del /f "%~dp0\Firefox\autoconfig.cfg"
 
 CLS && ECHO.&ECHO Done! &&PAUSE>NUL & EXIT
