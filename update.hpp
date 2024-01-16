@@ -3,18 +3,17 @@
 
 #include "processutil.hpp"
 
-#include <boost/json.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
+#include <boost/filesystem.hpp>
 
 #include <regex>
 #include <string>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 
 #define FIREFOX_LATEST_UPDATE_URL "https://download.mozilla.org/?product=firefox-latest&os=win64&lang=en-US"
 
-namespace pt = boost::property_tree;
+namespace fs = boost::filesystem;
 
 int CompareVersion(const std::string& a, const std::string& b)
 {
@@ -90,24 +89,21 @@ int UpdateChromium(
     std::string res, downloadUrl;
     std::regex versionRe(R"(/firefox/releases/([\d+\.]+)/)");
     std::smatch matches;
-    pt::ptree root, assets;
-    boost::format format;
-    int exitcode = -1;
     bool needUpdate = false;
+    WCHAR szCmd[MAX_PATH];
+    DWORD exitcode = 1;
 
     // Request latest chromium info
-    format = boost::format("curl --head %s \"%s\"") % curlExtraParams % FIREFOX_LATEST_UPDATE_URL;
-    std::cout << "curl: " << format.str() << std::endl;
+    swprintf_s(szCmd, L"curl --head %S \"%S\"", curlExtraParams.c_str(), FIREFOX_LATEST_UPDATE_URL);
     for (int i=0; i<5 && exitcode!=0; ++i) {
-        std::cout << "Try get latest update info: ";
-        res = ExecCmd(format.str().c_str(), &exitcode);
-        std::cout << exitcode << std::endl;
+        if (!StartProcessWithOutput(szCmd, NULL, res, &exitcode))
+            return 1;
     }
     if (exitcode || res.empty())
-        return 1;
+        return 2;
 
     if (!std::regex_search(res, matches, versionRe))
-        return 2;
+        return 3;
     
     updateVersion = matches[1];
 
@@ -120,40 +116,44 @@ int UpdateChromium(
     }
 
     if (!needUpdate)
-        return 3;
+        return 4;
 
     // Download
-    format = boost::format("curl -L %s -o %s \"%s\"") % curlExtraParams % excutableName % FIREFOX_LATEST_UPDATE_URL;
-    std::cout << "curl: " << format.str() << std::endl;
-    ExecCmd(format.str().c_str(), &exitcode);
+    swprintf_s(szCmd, L"curl -L %S -o %S \"%S\"", curlExtraParams.c_str(), excutableName, FIREFOX_LATEST_UPDATE_URL);
+    if (!StartProcess(szCmd, NULL, &exitcode))
+        return 5;
     if (exitcode != 0)
-        return 4;
+        return 6;
 
     // Convert from self-extract exe to 7z
     if (convertExeTo7z(excutableName, archiveName) != 0)
-        return 5;
+        return 7;
 
     // Check zip integerity
-    format = boost::format(R"(7za t %s >NUL 2>NUL)")  % archiveName;
-    ExecCmd(format.str().c_str(), &exitcode);
-    std::cout << "7za: " << format.str() << std::endl;
+    swprintf_s(szCmd, LR"(7za t %S >NUL 2>NUL)", archiveName);
+    if (!StartProcess(szCmd, NULL, &exitcode))
+        return 5;
     if (exitcode != 0) {
-        DeleteFileA(archiveName);
-        return 6;
+        fs::remove(archiveName);
+        return 8;
     }
     
     // Unzip
-    format = boost::format(
-                 "7za x %s core >NUL 2>NUL && move core %s") % archiveName % updateVersion;
-    std::cout << "7za: " << format.str() << std::endl;
-    res = ExecCmd(format.str().c_str(), &exitcode);
+    swprintf_s(szCmd, L"7za x %S core >NUL 2>NUL", archiveName);
+    if (!StartProcess(szCmd, NULL, &exitcode)) {
+        fs::remove(archiveName);
+        return 9;
+    }
     if (exitcode != 0) {
-        DeleteFileA(archiveName);
-        return 7;
+        fs::remove(archiveName);
+        return 10;
     }
 
     // Delete File
-    DeleteFileA(archiveName);
+    fs::remove(archiveName);
+
+    // Rename
+    fs::rename("core", updateVersion);
 
     // Succeeded
     return 0;
