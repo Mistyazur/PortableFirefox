@@ -11,7 +11,6 @@ add_definitions(
 
 message("================================ Import vcpkg ================================")
 set(CMAKE_TOOLCHAIN_FILE "E:/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-set(CMAKE_PREFIX_PATH ${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET})
 
 if (${CMAKE_GENERATOR_PLATFORM} STREQUAL "x64")
   set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
@@ -25,8 +24,8 @@ project(PortableFirefox VERSION 0.1.0)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
-find_package(Boost COMPONENTS filesystem REQUIRED)
-find_package(RapidJSON CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(RapidJSON REQUIRED CONFIG)
 
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${RAPIDJSON_INCLUDE_DIRS})
