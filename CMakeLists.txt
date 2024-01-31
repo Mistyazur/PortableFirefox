@@ -1,24 +1,26 @@
 cmake_minimum_required(VERSION 3.15.0)
 
-# set(CMAKE_CXX_STANDARD 17)
-# set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(CMAKE_CXX_EXTENSIONS OFF)
-
-add_definitions(
-  -DUNICODE
-  -D_UNICODE
-)
-
-message("================================ Import vcpkg ================================")
-set(CMAKE_TOOLCHAIN_FILE "E:/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-
+### Import vcpkg start
 if (${CMAKE_GENERATOR_PLATFORM} STREQUAL "x64")
   set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
 elseif (${CMAKE_GENERATOR_PLATFORM} STREQUAL "win32")
   set(VCPKG_TARGET_TRIPLET "x86-windows-static" CACHE STRING "")
 endif()
-message("================================ ${VCPKG_TARGET_TRIPLET} ================================")
 
+include("E:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+# set(CMAKE_TOOLCHAIN_FILE "E:/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "") # This will not work in subdirectory
+### Import vcpkg end
+
+# C++17
+# set(CMAKE_CXX_STANDARD 17)
+# set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Unicode
+add_definitions(
+  -DUNICODE
+  -D_UNICODE
+)
 
 project(PortableFirefox VERSION 0.1.0)
 
